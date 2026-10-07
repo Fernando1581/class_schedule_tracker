@@ -1,8 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="flutter_application_3"
+    
+        android:label="ClassMate"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <service
+            android:name="com.gdelataillade.alarm.services.AlarmService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false"/>
+        <service
+            android:name="com.gdelataillade.alarm.services.AlarmNotificationOnKillService"
+            android:exported="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

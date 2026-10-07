@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "192975131663",
+    "project_id": "classmate-f0a6d",
+    "storage_bucket": "classmate-f0a6d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:192975131663:android:7f798c07f6761d99257f7a",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_3"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "192975131663-csd29hlq594t7r4a0rkem6ak53pg5i8f.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7LocaTqko92sSABlISRVwkrdQbu4T3ks"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "192975131663-csd29hlq594t7r4a0rkem6ak53pg5i8f.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

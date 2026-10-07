@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 
 class DayInfo {
   String room;
+  String teacher;
   bool isLab;
 
-  DayInfo({this.room = '', this.isLab = false});
+  DayInfo({
+    this.room = '',
+    this.teacher = '',
+    this.isLab = false,
+  });
 }
 
 class TimeEntry {
@@ -14,7 +19,7 @@ class TimeEntry {
   String teacher;
   int colorIndex;
   String type;
-  Map<int, DayInfo> perDay; // day -> (room, isLab)
+  Map<int, DayInfo> perDay;
 
   TimeEntry({
     required this.startTime,
@@ -32,6 +37,12 @@ class TimeEntry {
     return '';
   }
 
+  String teacherFor(int day) {
+    if (perDay.containsKey(day)) return perDay[day]!.teacher;
+    if (perDay.isNotEmpty) return perDay.values.first.teacher;
+    return teacher;
+  }
+
   bool isLabFor(int day) {
     if (perDay.containsKey(day)) return perDay[day]!.isLab;
     if (perDay.isNotEmpty) return perDay.values.first.isLab;
@@ -42,7 +53,9 @@ class TimeEntry {
     final startMin = startTime.hour * 60 + startTime.minute;
     var endMin = endTime.hour * 60 + endTime.minute;
     if (endMin <= startMin) endMin += 24 * 60;
-    return Duration(minutes: endMin - startMin);
+    final diff = endMin - startMin;
+    if (diff > 360) return Duration.zero;
+    return Duration(minutes: diff);
   }
 
   TimeEntry copy() {
@@ -55,7 +68,11 @@ class TimeEntry {
       type: type,
       perDay: {
         for (final e in perDay.entries)
-          e.key: DayInfo(room: e.value.room, isLab: e.value.isLab),
+          e.key: DayInfo(
+            room: e.value.room,
+            teacher: e.value.teacher,
+            isLab: e.value.isLab,
+          ),
       },
     );
   }
@@ -79,4 +96,12 @@ class ClassSchedule {
             };
 }
 
+class Note {
+  String text;
+  DateTime date;
+
+  Note({required this.text, required this.date});
+}
+
 final List<ClassSchedule> appSchedules = [];
+final List<Note> appNotes = [];

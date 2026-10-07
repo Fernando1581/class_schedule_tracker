@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/class_schedule.dart';
+import '../services/firestore_service.dart';
 import '../theme.dart';
 
 const kBlockColors = <Color>[
@@ -14,11 +15,13 @@ const kBlockColors = <Color>[
 class DayTablePage extends StatefulWidget {
   final ClassSchedule schedule;
   final int weekday;
+  final String userId;
 
   const DayTablePage({
     super.key,
     required this.schedule,
     required this.weekday,
+    required this.userId,
   });
 
   @override
@@ -35,7 +38,13 @@ class _DayTablePageState extends State<DayTablePage> {
     6: 'Saturday',
   };
 
+  final _service = FirestoreService();
+
   List<TimeEntry> get _entries => widget.schedule.days[widget.weekday]!;
+
+  Future<void> _persist() async {
+    await _service.saveSchedule(widget.schedule, widget.userId);
+  }
 
   void _sort(List<TimeEntry> list) {
     list.sort((a, b) {
@@ -61,6 +70,13 @@ class _DayTablePageState extends State<DayTablePage> {
     return en;
   }
 
+  bool _tooLong(TimeOfDay s, TimeOfDay e) {
+    final sM = s.hour * 60 + s.minute;
+    var eM = e.hour * 60 + e.minute;
+    if (eM <= sM) eM += 24 * 60;
+    return (eM - sM) > 360;
+  }
+
   List<int> _targetDays(String type) {
     switch (type) {
       case 'major':
@@ -72,6 +88,10 @@ class _DayTablePageState extends State<DayTablePage> {
       default:
         return [widget.weekday];
     }
+  }
+
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _addEntry({TimeEntry? existing}) async {
@@ -114,15 +134,20 @@ class _DayTablePageState extends State<DayTablePage> {
         _sort(list);
       }
     });
+
+    await _persist();
   }
 
   Future<void> _editDay(TimeEntry e) async {
-    final currentRoom = e.roomFor(widget.weekday);
-    final currentLab = e.isLabFor(widget.weekday);
-    final roomController = TextEditingController(text: currentRoom);
-    bool lab = currentLab;
+    TimeOfDay start = e.startTime;
+    TimeOfDay end = e.endTime;
+    final roomController =
+        TextEditingController(text: e.roomFor(widget.weekday));
+    final teacherController =
+        TextEditingController(text: e.teacherFor(widget.weekday));
+    bool lab = e.isLabFor(widget.weekday);
 
-    final saved = await showModalBottomSheet<DayInfo>(
+    final saved = await showModalBottomSheet<_DayEditResult>(
       context: context,
       isScrollControlled: true,
       backgroundColor: kSurfaceAlt,
@@ -133,77 +158,137 @@ class _DayTablePageState extends State<DayTablePage> {
         final bottom = MediaQuery.of(ctx).viewInsets.bottom;
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
+            Future<void> pick(bool isStart) async {
+              final p = await showTimePicker(
+                context: ctx,
+                initialTime: isStart ? start : end,
+              );
+              if (p != null) setSheetState(() => isStart ? start = p : end = p);
+            }
+
             return Padding(
               padding: EdgeInsets.fromLTRB(24, 20, 24, 20 + bottom),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${_dayNames[widget.weekday]} details',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: kTextPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Only changes this day.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: kTextSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: roomController,
-                    decoration: const InputDecoration(
-                      labelText: 'Room',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: lab,
-                    onChanged: (v) => setSheetState(() => lab = v),
-                    activeColor: kAccent,
-                    title: const Text(
-                      'Lab class on this day',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_dayNames[widget.weekday]} details',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                         color: kTextPrimary,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(
-                        ctx,
-                        DayInfo(
-                          room: roomController.text.trim(),
-                          isLab: lab,
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Only changes this day.',
+                      style: TextStyle(fontSize: 12, color: kTextSecondary),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TimeField(
+                            label: 'Start',
+                            value: _fmt(start),
+                            onTap: () => pick(true),
+                          ),
                         ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kAccent,
-                        foregroundColor: kTextPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _TimeField(
+                            label: 'End',
+                            value: _fmt(end),
+                            onTap: () => pick(false),
+                          ),
                         ),
-                      ),
-                      child: const Text(
-                        'Save',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: roomController,
+                      decoration: const InputDecoration(
+                        labelText: 'Room',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: teacherController,
+                      decoration: const InputDecoration(
+                        labelText: 'Teacher',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: lab,
+                      onChanged: (v) => setSheetState(() => lab = v),
+                      activeColor: kAccent,
+                      title: const Text(
+                        'Lab class on this day',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: kTextPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          if (roomController.text.trim().isEmpty) {
+                            _snack('Please enter a room');
+                            return;
+                          }
+                          if (teacherController.text.trim().isEmpty) {
+                            _snack('Please enter a teacher');
+                            return;
+                          }
+                          final sM = start.hour * 60 + start.minute;
+                          final eM = end.hour * 60 + end.minute;
+                          if (sM == eM) {
+                            _snack('Start and end time cannot be the same');
+                            return;
+                          }
+                          if (_tooLong(start, end)) {
+                            _snack('Class cannot be longer than 6 hours');
+                            return;
+                          }
+                          Navigator.pop(
+                            ctx,
+                            _DayEditResult(
+                              start: start,
+                              end: end,
+                              info: DayInfo(
+                                room: roomController.text.trim(),
+                                teacher: teacherController.text.trim(),
+                                isLab: lab,
+                              ),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kAccent,
+                          foregroundColor: kTextPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        child: const Text(
+                          'Save',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             );
           },
@@ -214,21 +299,27 @@ class _DayTablePageState extends State<DayTablePage> {
     if (saved == null) return;
 
     setState(() {
-      for (final entry in _entries) {
-        if (entry.subject == e.subject &&
-            entry.startTime == e.startTime &&
-            entry.endTime == e.endTime) {
-          if (saved.room.isEmpty && !saved.isLab) {
-            entry.perDay.remove(widget.weekday);
-          } else {
-            entry.perDay[widget.weekday] = saved;
-          }
-        }
-      }
+      final list = _entries;
+      final i = list.indexOf(e);
+      if (i < 0) return;
+
+      list[i] = TimeEntry(
+        startTime: saved.start,
+        endTime: saved.end,
+        subject: e.subject,
+        teacher: e.teacher,
+        colorIndex: e.colorIndex,
+        type: e.type,
+        perDay: e.perDay,
+      );
+      list[i].perDay[widget.weekday] = saved.info;
+      _sort(list);
     });
+
+    await _persist();
   }
 
-  void _deleteEntry(TimeEntry e) {
+  Future<void> _deleteEntry(TimeEntry e) async {
     setState(() {
       final days = _targetDays(e.type);
       for (final d in days) {
@@ -240,6 +331,7 @@ class _DayTablePageState extends State<DayTablePage> {
         );
       }
     });
+    await _persist();
   }
 
   List<Widget> _buildRows() {
@@ -255,6 +347,7 @@ class _DayTablePageState extends State<DayTablePage> {
           color: color,
           timeLabel: _fmt(e.startTime),
           roomLabel: e.roomFor(day),
+          teacherLabel: e.teacherFor(day),
           isLab: e.isLabFor(day),
           onTap: () => _editDay(e),
           onLongPress: () => _addEntry(existing: e),
@@ -341,11 +434,24 @@ class _DayTablePageState extends State<DayTablePage> {
   }
 }
 
+class _DayEditResult {
+  final TimeOfDay start;
+  final TimeOfDay end;
+  final DayInfo info;
+
+  _DayEditResult({
+    required this.start,
+    required this.end,
+    required this.info,
+  });
+}
+
 class _TimelineBlock extends StatelessWidget {
   final TimeEntry entry;
   final Color color;
   final String timeLabel;
   final String roomLabel;
+  final String teacherLabel;
   final bool isLab;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
@@ -357,6 +463,7 @@ class _TimelineBlock extends StatelessWidget {
     required this.color,
     required this.timeLabel,
     required this.roomLabel,
+    required this.teacherLabel,
     required this.isLab,
     required this.onTap,
     required this.onLongPress,
@@ -487,10 +594,10 @@ class _TimelineBlock extends StatelessWidget {
                           ),
                         ),
                       ],
-                      if (entry.teacher.isNotEmpty) ...[
+                      if (teacherLabel.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
-                          entry.teacher,
+                          teacherLabel,
                           style: const TextStyle(
                             fontSize: 12,
                             color: kTextSecondary,
@@ -591,7 +698,11 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
           ? e.perDay.values.first.room
           : '',
     );
-    _teacherController = TextEditingController(text: e?.teacher ?? '');
+    _teacherController = TextEditingController(
+      text: e != null && e.perDay.isNotEmpty
+          ? e.perDay.values.first.teacher
+          : (e?.teacher ?? ''),
+    );
     _start = e?.startTime ?? const TimeOfDay(hour: 8, minute: 0);
     _end = e?.endTime ?? const TimeOfDay(hour: 9, minute: 0);
     _colorIndex = e?.colorIndex ?? widget.nextColorIndex;
@@ -639,32 +750,47 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
     }
   }
 
+  void _snack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
   void _submit() {
     if (_subjectController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a subject')),
-      );
+      _snack('Please enter a subject');
+      return;
+    }
+    if (_roomController.text.trim().isEmpty) {
+      _snack('Please enter a room');
+      return;
+    }
+    if (_teacherController.text.trim().isEmpty) {
+      _snack('Please enter a teacher');
       return;
     }
 
     final startMin = _start.hour * 60 + _start.minute;
-    final endMin = _end.hour * 60 + _end.minute;
+    var endMin = _end.hour * 60 + _end.minute;
+    if (endMin <= startMin) endMin += 24 * 60;
+
     if (endMin == startMin) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Start and end time cannot be the same'),
-        ),
-      );
+      _snack('Start and end time cannot be the same');
+      return;
+    }
+    if (endMin - startMin > 360) {
+      _snack('Class cannot be longer than 6 hours');
       return;
     }
 
     final baseRoom = _roomController.text.trim();
+    final baseTeacher = _teacherController.text.trim();
     final days = _targetDaysForType(_type);
     final perDay = <int, DayInfo>{};
     for (final d in days) {
-      if (baseRoom.isNotEmpty || _isLab) {
-        perDay[d] = DayInfo(room: baseRoom, isLab: _isLab);
-      }
+      perDay[d] = DayInfo(
+        room: baseRoom,
+        teacher: baseTeacher,
+        isLab: _isLab,
+      );
     }
 
     Navigator.pop(
@@ -673,7 +799,7 @@ class _AddEntrySheetState extends State<_AddEntrySheet> {
         startTime: _start,
         endTime: _end,
         subject: _subjectController.text.trim(),
-        teacher: _teacherController.text.trim(),
+        teacher: baseTeacher,
         colorIndex: _colorIndex,
         type: _type,
         perDay: perDay,
