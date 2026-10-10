@@ -17,7 +17,7 @@ class _NotesPageState extends State<NotesPage> {
   String get _userId => FirebaseAuth.instance.currentUser?.uid ?? '';
 
   DateTime _phToday() {
-    final n = DateTime.now().toUtc().add(const Duration(hours: 8));
+    final n = DateTime.now();
     return DateTime(n.year, n.month, n.day);
   }
 

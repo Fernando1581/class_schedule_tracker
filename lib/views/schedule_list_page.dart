@@ -352,5 +352,5 @@ class _ScheduleCard extends StatelessWidget {
         ),
       ),
     );
-  }
+  } 
 }

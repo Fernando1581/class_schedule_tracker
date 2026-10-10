@@ -73,7 +73,7 @@ class _HomePageState extends State<HomePage>
   }
 
   DateTime _phNow() {
-    return DateTime.now().toUtc().add(const Duration(hours: 8));
+    return DateTime.now();
   }
 
   String _alarmKey(ClassSchedule s, TimeEntry e, DateTime day) {

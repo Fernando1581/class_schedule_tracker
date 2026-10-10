@@ -94,6 +94,60 @@ class _DayTablePageState extends State<DayTablePage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  int _newStart(TimeEntry e) => e.startTime.hour * 60 + e.startTime.minute;
+
+  int _newEnd(TimeEntry e) {
+    final s = e.startTime.hour * 60 + e.startTime.minute;
+    var en = e.endTime.hour * 60 + e.endTime.minute;
+    if (en <= s) en += 24 * 60;
+    return en;
+  }
+
+  TimeEntry? _findConflict(
+    int day,
+    TimeEntry candidate, {
+    TimeEntry? ignore,
+  }) {
+    final list = widget.schedule.days[day] ?? [];
+    final cStart = _newStart(candidate);
+    final cEnd = _newEnd(candidate);
+
+    for (final e in list) {
+      if (identical(e, ignore)) continue;
+      if (ignore != null &&
+          e.subject == ignore.subject &&
+          e.startTime == ignore.startTime &&
+          e.endTime == ignore.endTime) {
+        continue;
+      }
+
+      final eStart = _startMin(e);
+      final eEnd = _endMin(e);
+
+      if (cStart < eEnd && cEnd > eStart) {
+        return e;
+      }
+    }
+    return null;
+  }
+
+  String? _validateNoConflicts(
+    TimeEntry candidate,
+    List<int> targetDays, {
+    TimeEntry? ignore,
+  }) {
+    for (final d in targetDays) {
+      final conflict = _findConflict(d, candidate, ignore: ignore);
+      if (conflict != null) {
+        final dayName = _dayNames[d] ?? 'Day $d';
+        return 'Conflicts with "${conflict.subject}" '
+            '(${_fmt(conflict.startTime)} - ${_fmt(conflict.endTime)}) '
+            'on $dayName';
+      }
+    }
+    return null;
+  }
+
   Future<void> _addEntry({TimeEntry? existing}) async {
     final result = await showModalBottomSheet<TimeEntry>(
       context: context,
@@ -110,6 +164,18 @@ class _DayTablePageState extends State<DayTablePage> {
     );
     if (result == null) return;
 
+    final newDays = _targetDays(result.type);
+
+    final error = _validateNoConflicts(
+      result,
+      newDays,
+      ignore: existing,
+    );
+    if (error != null) {
+      _snack(error);
+      return;
+    }
+
     setState(() {
       if (existing != null) {
         final oldDays = _targetDays(existing.type);
@@ -123,7 +189,6 @@ class _DayTablePageState extends State<DayTablePage> {
         }
       }
 
-      final newDays = _targetDays(result.type);
       for (final d in newDays) {
         final list = widget.schedule.days[d]!;
         final dupe = list.any((e) =>
@@ -260,6 +325,31 @@ class _DayTablePageState extends State<DayTablePage> {
                             _snack('Class cannot be longer than 6 hours');
                             return;
                           }
+
+                          final candidate = TimeEntry(
+                            startTime: start,
+                            endTime: end,
+                            subject: e.subject,
+                            teacher: e.teacher,
+                            colorIndex: e.colorIndex,
+                            type: e.type,
+                            perDay: e.perDay,
+                          );
+
+                          final conflict = _findConflict(
+                            widget.weekday,
+                            candidate,
+                            ignore: e,
+                          );
+                          if (conflict != null) {
+                            _snack(
+                              'Conflicts with "${conflict.subject}" '
+                              '(${_fmt(conflict.startTime)} - '
+                              '${_fmt(conflict.endTime)})',
+                            );
+                            return;
+                          }
+
                           Navigator.pop(
                             ctx,
                             _DayEditResult(

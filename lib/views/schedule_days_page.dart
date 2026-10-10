@@ -50,8 +50,7 @@ class _ScheduleDaysPageState extends State<ScheduleDaysPage> {
   }
 
   bool _isToday(int weekday) {
-    final n = DateTime.now().toUtc().add(const Duration(hours: 8));
-    return n.weekday == weekday;
+    return DateTime.now().weekday == weekday;
   }
 
   @override
